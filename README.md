@@ -1,31 +1,31 @@
-# Lyric Emotion Timeline
+# Lyric Emotion Timeline: Multilingual Song Emotion & Dynamics Classifier
 
-Проект за анализ на емоционалната динамика в текстове на песни.
+A production-grade Machine Learning project that analyzes the emotional dynamics of songs verse by verse, rather than performing a static sentiment analysis on the track as a whole.
 
-## Структура
+## Project Structure
 
 ```text
 lyric-emotion-timeline/
-├── data/                 # Сурови и обработени данни
-├── notebooks/            # Анализ и експерименти
-├── src/
-│   ├── config.py         # Конфигурация и етикети
-│   ├── dataset.py        # Зареждане на Dataset и DataLoader-и
-│   ├── model.py          # Архитектура на класификатора
-│   ├── train.py          # Обучителен цикъл
-│   ├── inference.py      # Предсказване
-│   └── visualizer.py     # Интерактивни графики
-├── app.py                # Streamlit интерфейс
-├── Dockerfile            # Контейнеризация
-└── requirements.txt      # Зависимости
-```
+├── data/                    # Raw and processed datasets
+├── notebooks/               # Exploratory data analysis & experiments
+├── src/                     # Core Python package
+│   ├── __init__.py
+│   ├── config.py            # Configurations, hyperparameters & class mappings
+│   ├── dataset.py           # PyTorch Dataset & DataLoaders for multilingual text
+│   ├── model.py             # XLM-RoBERTa classification architecture
+│   ├── train.py             # Training loop with metrics and evaluation
+│   ├── inference.py         # Prediction pipeline & timeline smoothing
+│   └── visualizer.py        # Interactive Plotly charts generator
+├── app.py                   # Streamlit web application interface
+├── Dockerfile               # Containerization setup
+└── requirements.txt         # Project dependencies
 
-## Стартиране
+## Getting Started
 
 ```bash
 python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-За обучение CSV файлът трябва да съдържа колона `text` и се подава чрез
+For training, your CSV dataset must contain a text column and can be executed via
 `python -m src.train`.
