@@ -1,0 +1,1 @@
+"""Lyric emotion timeline package."""
