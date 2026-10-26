@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual Environments (Виртуални среди)
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+*.pth
+*.bin
+*.onnx
+*.safetensors
+models/saved/
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# IDE & Code Editors (VS Code / PyCharm)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Generated Files (Системни файлове)
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Streamlit & Plotly Cache
+.streamlit/

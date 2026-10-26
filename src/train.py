@@ -1,34 +1,68 @@
-"""Training entry point for the emotion classifier."""
+import torch
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer, AdamW
+from src.config import MODEL_NAME, MAX_LENGTH, BATCH_SIZE, LEARNING_RATE, EPOCHS, SAVED_MODEL_DIR
+from src.model import LyricEmotionClassifier
+from src.dataset import LyricDataset
 
-from __future__ import annotations
+def train_model():
+    print("🚀 Initializing tokenizer and model...")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = LyricEmotionClassifier()
 
-from .config import BATCH_SIZE, LEARNING_RATE, NUM_TRAIN_EPOCHS
+    # Temporary sample dataset for testing multilingual training (Bulgarian, English, Spanish, etc.)
+    sample_texts = [
+        "Слънцето грее и днес съм толкова щастлив!",  # Bulgarian (Joy)
+        "Чувствам се толкова сам и тъжен в тази нощ.",  # Bulgarian (Sadness)
+        "Let's go, party all night, we have the energy!", # English (Hype)
+        "Всичко ме дразни, омръзна ми от тези лъжи!",   # Bulgarian (Anger)
+        "Спомням си старите дни и детството ни...",      # Bulgarian (Nostalgia)
+        "Estoy tan feliz hoy, todo es maravilloso.",   # Spanish (Joy)
+        "Me siento muy triste y con el corazón roto.", # Spanish (Sadness)
+        "¡Esta fiesta está increíble, con mucha energía!" # Spanish (Hype)
+    ]
+    
+    # Corresponding emotion labels mapped to integers (0 to 4)
+    # Emotions: ["Joy", "Sadness", "Hype", "Anger", "Nostalgia"]
+    sample_labels = [0, 1, 2, 3, 4, 0, 1, 2]
 
+    # Create Dataset and DataLoader
+    dataset = LyricDataset(sample_texts, sample_labels, tokenizer, MAX_LENGTH)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-def train(dataset_path: str, output_dir: str = "artifacts/model"):
-    """Train the classifier using the Hugging Face Trainer."""
-    from datasets import Dataset
-    from transformers import TrainingArguments
+    # Optimizer
+    optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
 
-    from .dataset import load_lyrics_dataset
-    from .model import create_model
+    print(f"🏋️ Starting training for {EPOCHS} epochs...")
+    model.train()
 
-    dataset = Dataset.from_pandas(load_lyrics_dataset(dataset_path))
-    model = create_model()
-    arguments = TrainingArguments(
-        output_dir=output_dir,
-        learning_rate=LEARNING_RATE,
-        per_device_train_batch_size=BATCH_SIZE,
-        num_train_epochs=NUM_TRAIN_EPOCHS,
-        report_to="none",
-    )
-    from transformers import Trainer
+    for epoch in range(EPOCHS):
+        total_loss = 0
+        for batch in dataloader:
+            optimizer.zero_grad()
 
-    trainer = Trainer(model=model, args=arguments, train_dataset=dataset)
-    trainer.train()
-    trainer.save_model(output_dir)
-    return trainer
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
+            labels = batch["labels"]
 
+            # Forward pass
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+
+            # Backward pass and optimization
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        avg_loss = total_loss / len(dataloader)
+        print(f"Epoch [{epoch+1}/{EPOCHS}] completed. Average Loss: {avg_loss:.4f}")
+
+    # Save the fine-tuned model and tokenizer
+    print(f"💾 Saving trained model to {SAVED_MODEL_DIR}...")
+    torch.save(model.state_dict(), SAVED_MODEL_DIR / "model_weights.pth")
+    tokenizer.save_pretrained(SAVED_MODEL_DIR)
+    print("✅ Training finished and model successfully saved!")
 
 if __name__ == "__main__":
-    train("data/lyrics.csv")
+    train_model()
