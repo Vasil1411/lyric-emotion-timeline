@@ -1,30 +1,49 @@
 import torch
+import csv
+from pathlib import Path
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AdamW
+from transformers import AutoTokenizer
+from torch.optim import AdamW
 from src.config import MODEL_NAME, MAX_LENGTH, BATCH_SIZE, LEARNING_RATE, EPOCHS, SAVED_MODEL_DIR
 from src.model import LyricEmotionClassifier
 from src.dataset import LyricDataset
 
+def load_dataset_from_csv(file_path: str):
+    """
+    Load texts and labels from a CSV file located in data/raw/
+    Expected CSV format: text,label
+    """
+    texts = []
+    labels = []
+    
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"❌ Dataset file not found at {file_path}. Please run generate_data.py first!")
+        
+    print(f"📂 Loading dataset from {file_path}...")
+    with open(path, mode="r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            texts.append(row["text"])
+            labels.append(int(row["label"]))
+            
+    print(f"✅ Loaded {len(texts)} samples successfully.")
+    return texts, labels
+
 def train_model():
+    # 1. Automatically choose between GPU (CUDA) or CPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🔥 Training on device: {device.type.upper()}")
+
     print("🚀 Initializing tokenizer and model...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = LyricEmotionClassifier()
-
-    # Temporary sample dataset for testing multilingual training (Bulgarian, English, Spanish, etc.)
-    sample_texts = [
-        "Слънцето грее и днес съм толкова щастлив!",  # Bulgarian (Joy)
-        "Чувствам се толкова сам и тъжен в тази нощ.",  # Bulgarian (Sadness)
-        "Let's go, party all night, we have the energy!", # English (Hype)
-        "Всичко ме дразни, омръзна ми от тези лъжи!",   # Bulgarian (Anger)
-        "Спомням си старите дни и детството ни...",      # Bulgarian (Nostalgia)
-        "Estoy tan feliz hoy, todo es maravilloso.",   # Spanish (Joy)
-        "Me siento muy triste y con el corazón roto.", # Spanish (Sadness)
-        "¡Esta fiesta está increíble, con mucha energía!" # Spanish (Hype)
-    ]
     
-    # Corresponding emotion labels mapped to integers (0 to 4)
-    # Emotions: ["Joy", "Sadness", "Hype", "Anger", "Nostalgia"]
-    sample_labels = [0, 1, 2, 3, 4, 0, 1, 2]
+    # 2. Transfer the model to the GPU device
+    model = LyricEmotionClassifier().to(device)
+
+    # Load the multilingual dataset from data/raw/train_lyrics.csv
+    csv_path = Path("data/raw/train_lyrics.csv")
+    sample_texts, sample_labels = load_dataset_from_csv(csv_path)
 
     # Create Dataset and DataLoader
     dataset = LyricDataset(sample_texts, sample_labels, tokenizer, MAX_LENGTH)
@@ -33,17 +52,20 @@ def train_model():
     # Optimizer
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
 
-    print(f"🏋️ Starting training for {EPOCHS} epochs...")
+    total_batches = len(dataloader)
+    print(f"🏋️ Starting training for {EPOCHS} epochs with {len(sample_texts)} samples ({total_batches} batches per epoch)...")
     model.train()
 
     for epoch in range(EPOCHS):
         total_loss = 0
-        for batch in dataloader:
+        
+        for step, batch in enumerate(dataloader):
             optimizer.zero_grad()
 
-            input_ids = batch["input_ids"]
-            attention_mask = batch["attention_mask"]
-            labels = batch["labels"]
+            # 3. Transfer batch data to the GPU device
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
 
             # Forward pass
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
@@ -54,13 +76,28 @@ def train_model():
             optimizer.step()
 
             total_loss += loss.item()
+            
+            # 💡 Print progress every 50 steps so you can track live training performance
+            if (step + 1) % 50 == 0 or (step + 1) == total_batches:
+                print(f"Epoch [{epoch+1}/{EPOCHS}] | Step [{step+1}/{total_batches}] | Loss: {loss.item():.4f}")
 
-        avg_loss = total_loss / len(dataloader)
-        print(f"Epoch [{epoch+1}/{EPOCHS}] completed. Average Loss: {avg_loss:.4f}")
+        avg_loss = total_loss / total_batches
+        print(f"🎉 Epoch [{epoch+1}/{EPOCHS}] completed. Average Loss: {avg_loss:.4f}\n")
 
-    # Save the fine-tuned model and tokenizer
+    # Save the fine-tuned model and tokenizer properly so inference.py can load them
     print(f"💾 Saving trained model to {SAVED_MODEL_DIR}...")
-    torch.save(model.state_dict(), SAVED_MODEL_DIR / "model_weights.pth")
+    
+    try:
+        if hasattr(model, "transformer"):
+            model.transformer.save_pretrained(SAVED_MODEL_DIR)
+        elif hasattr(model, "model"):
+            model.model.save_pretrained(SAVED_MODEL_DIR)
+        else:
+            model.save_pretrained(SAVED_MODEL_DIR)
+    except Exception as e:
+        print(f"⚠️ Warning during save: {e}. Saving state_dict instead.")
+        torch.save(model.state_dict(), SAVED_MODEL_DIR / "model_weights.pth")
+        
     tokenizer.save_pretrained(SAVED_MODEL_DIR)
     print("✅ Training finished and model successfully saved!")
 
