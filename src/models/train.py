@@ -31,7 +31,7 @@ def load_dataset_from_json(file_path: str):
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Взимаме само записаните проби, които имат валиден етикет (изключваме евентуални останали None)
+    
     valid_samples = [item for item in data if item.get("label") is not None]
 
     for item in valid_samples:
@@ -53,7 +53,7 @@ def train_model():
     # 2. Transfer the model to the GPU device
     model = LyricEmotionClassifier().to(device)
 
-    # Зареждаме вече финализирания JSON dataset с над 2000+ проби
+   
     json_path = Path("data/processed_training_data.json")
     sample_texts, sample_labels = load_dataset_from_json(json_path)
 
@@ -107,11 +107,11 @@ def train_model():
             f" {avg_loss:.4f}\n"
         )
 
-    # 💾 ГАРАНТИРАНО ЗАПИСВАНЕ НА МОДЕЛА И ТЕГЛАТА
+    
     print(f"💾 Saving trained model and weights to {SAVED_MODEL_DIR}...")
     SAVED_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Записваме state_dict директно, за да сме сигурни, че теглата се пазарят
+    # Save the model's state dict
     torch.save(model.state_dict(), SAVED_MODEL_DIR / "model_weights.pth")
 
     try:

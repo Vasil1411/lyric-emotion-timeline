@@ -42,6 +42,7 @@ ehthumbs.db
 .streamlit/
 
 
-models/
+/models/
 
 env
+data/songs.db

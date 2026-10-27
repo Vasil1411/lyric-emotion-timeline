@@ -6,17 +6,17 @@ from src.model import LyricEmotionClassifier
 
 def load_trained_model(device):
     """
-    Зарежда твоя фин-тюнат LyricEmotionClassifier с правилните 5 класа.
+    Loads your fine-tuned LyricEmotionClassifier with the correct 5 classes.
     """
     model_path = SAVED_MODEL_DIR if (SAVED_MODEL_DIR.exists() and any(SAVED_MODEL_DIR.iterdir())) else MODEL_NAME
     
     print(f"📂 Loading tokenizer and model from: {model_path}")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     
-    # Инициализираме твоя модел с 5-те емоционални класа
+    # Initialize the model with the 5 emotion classes
     model = LyricEmotionClassifier()
     
-    # Зареждаме записаните тегла отобучението
+    # Load trained model weights
     weights_path = SAVED_MODEL_DIR / "model_weights.pth"
     if weights_path.exists():
         print(f"🔗 Loading fine-tuned weights from {weights_path}")
@@ -34,7 +34,7 @@ def analyze_song_timeline(song_text: str):
     model.to(device)
     model.eval()
 
-    # Разбиваме на строфи (внимавай с разделителите \n\n или единични редове)
+    # Split song into stanzas
     stanzas = [stanza.strip() for stanza in song_text.split("\n\n") if stanza.strip()]
     
     print("\n" + "="*60)
@@ -46,7 +46,7 @@ def analyze_song_timeline(song_text: str):
         clean_stanza_text = " ".join(stanza.splitlines())
         print(f"\"{clean_stanza_text}\"\n")
         
-        # Инференс
+        # Tokenization & Inference
         encoding = tokenizer(
             clean_stanza_text,
             max_length=MAX_LENGTH,
@@ -60,7 +60,6 @@ def analyze_song_timeline(song_text: str):
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            # Ако моделът ти връща обект с .logits или директно логове:
             logits = outputs.logits if hasattr(outputs, "logits") else outputs
             probabilities = torch.nn.functional.softmax(logits, dim=-1)[0]
 
@@ -74,23 +73,11 @@ def analyze_song_timeline(song_text: str):
         print("-" * 60 + "\n")
 
 if __name__ == "__main__":
+    # Test sample text
     song_text = """
-    Вече колко дни
-    Тъпият си телефон затваряш ми
-    От какво си ти от камък ли?
-    Яко ли ти е да ме боли?
-    Хайде тръгвай си!
-    Повече боли моя като си
-    Шибани нещастници
-    Сме всички влюбени
-    Честито, свободна си!
-    Върви на майната си!
-
-    Казах, не, не, не, не, не с тебе никога
-    Казах, не, не, не, не, не, но си ми слабоста
-    Ето взимай този нож ела наръгай ме
-    Да се свършва вече искам болката да спре
-    Полудявам бе!
+    First stanza or verse text goes here for testing...
+    
+    Second stanza or chorus text goes here...
     """
 
     analyze_song_timeline(song_text)
