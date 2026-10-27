@@ -1,9 +1,12 @@
 import lyricsgenius
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+import lyricsgenius
 
 
-GENIUS_TOKEN = "WWZ09vJIIgmfJxIwko7zMrmZOaj9_SVuxrH7DASrCF3x_eYz5WpLGMacts2KxkOw"
+load_dotenv()
+GENIUS_TOKEN = os.getenv("GENIUS_TOKEN")
 
 def fetch_songs_for_artists(
     artists_list: list[str], max_songs_per_artist: int = 25
