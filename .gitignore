@@ -44,5 +44,9 @@ ehthumbs.db
 
 /models/
 
-env
+.env
 data/songs.db
+
+*.egg-info/
+dist/
+build/
