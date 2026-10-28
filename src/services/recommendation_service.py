@@ -2,11 +2,20 @@ import sqlite3
 import json
 from pathlib import Path
 import math
+import sys
+
+# --- PROFESSIONAL PATH RESOLUTION ---
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+# -----------------------------------
+
+from src.config import EMOTIONS
 
 class RecommendationService:
     def __init__(self, db_path="data/songs.db"):
-        self.db_path = Path(db_path)
-        self.emotions = ['Joy', 'Sadness', 'Anger', 'Hype', 'Nostalgia']
+        self.db_path = ROOT_DIR / db_path
+        self.emotions = EMOTIONS
 
     def _get_connection(self):
         """Helper to create a SQLite connection with row factory."""
@@ -88,9 +97,9 @@ if __name__ == "__main__":
     # Quick test of the recommendation service
     rec_service = RecommendationService()
     
-    print("🎵 Testing recommendations based on Song ID 1:")
+    print("🎵 Testing recommendations based on Song ID 302:")
     try:
-        recommendations = rec_service.recommend_by_song_id(1, top_n=3)
+        recommendations = rec_service.recommend_by_song_id(302, top_n=3)
         for i, rec in enumerate(recommendations, 1):
             print(f"{i}. {rec['artist']} - {rec['title']} ({rec['genre']}) [Distance: {rec['distance']:.4f}]")
             print(f"   Profile: {rec['overall_profile']}")
