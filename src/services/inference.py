@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 from transformers import AutoTokenizer
 from src.config import SAVED_MODEL_DIR, EMOTIONS, MAX_LENGTH, MODEL_NAME
-from src.model import LyricEmotionClassifier  
+from src.models.model import LyricEmotionClassifier  
 
 def load_trained_model(device):
     """
@@ -13,10 +13,13 @@ def load_trained_model(device):
     print(f"📂 Loading tokenizer and model from: {model_path}")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     
-    # Initialize the model with the 5 emotion classes
+    # 1. Инициализираме модела
     model = LyricEmotionClassifier()
     
-    # Load trained model weights
+    # 2. ПРЕХВЪРЛЯМЕ ГО НА УСТРОЙСТВОТО (GPU/CUDA) ПРЕДИ ДА ЗАРЕДИМ ТЕЖЕСТИТЕ!
+    model.to(device)
+    
+    # 3. Load trained model weights
     weights_path = SAVED_MODEL_DIR / "model_weights.pth"
     if weights_path.exists():
         print(f"🔗 Loading fine-tuned weights from {weights_path}")
@@ -31,7 +34,6 @@ def analyze_song_timeline(song_text: str):
     print(f"🔥 Running inference on device: {device.type.upper()}")
     
     tokenizer, model = load_trained_model(device)
-    model.to(device)
     model.eval()
 
     # Split song into stanzas
