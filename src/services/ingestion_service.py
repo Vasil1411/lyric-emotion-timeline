@@ -1,8 +1,8 @@
 import os
 import sys
-import sqlite3
 import json
 from pathlib import Path
+from sqlalchemy.orm import Session
 
 # --- PROFESSIONAL PATH RESOLUTION ---
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,13 +18,14 @@ import torch
 from src.data.clean_data import clean_lyrics
 from src.services.inference import load_trained_model
 from src.config import EMOTIONS, MAX_LENGTH
+from src.repositories.song_repository import SongRepository
+from src.entities.song_timeline import SongTimelineEntity
 
 env_path = ROOT_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
 
 class IngestionService:
-    def __init__(self, db_path="data/songs.db"):
-        self.db_path = ROOT_DIR / db_path
+    def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # 1. Initialize Genius API
@@ -45,7 +46,7 @@ class IngestionService:
 
     def fetch_song_from_api(self, artist: str, title: str) -> str:
         """Fetches raw song lyrics from the Genius API with a robust fallback search for Cyrillic."""
-        query = f"{artist} - {title}"
+        query = f"{artist} {title}"
         print(f"🔍 Searching Genius API for: {query}...")
         try:
             # 1. Direct search attempt
@@ -64,12 +65,10 @@ class IngestionService:
                 if not result:
                     continue
                 
-                # Безопасно извличане на заглавие
                 found_title = result.get("title") if isinstance(result, dict) else getattr(result, "title", None)
                 
-                # Безопасно извличане на името на изпълнителя
-                primary_artist = None
                 artist_data = result.get("primary_artist") if isinstance(result, dict) else getattr(result, "primary_artist", None)
+                primary_artist = None
                 if isinstance(artist_data, dict):
                     primary_artist = artist_data.get("name")
                 elif artist_data is not None:
@@ -86,26 +85,22 @@ class IngestionService:
             
         return None
         
-    def ingest_song(self, artist: str, title: str, genre: str = "Pop-folk") -> int:
+    def ingest_song(self, db: Session, artist: str, title: str, genre: str = "Pop-folk") -> int:
         """
-        Full ingestion pipeline for a new song:
-        1. Check if it exists in the SQLite database.
-        2. Fetch via Genius API if missing (with fallback).
+        Full ingestion pipeline for a new song using SQLAlchemy Repository:
+        1. Check if it exists in the database via SongRepository.
+        2. Fetch via Genius API if missing.
         3. Clean text and split into stanzas using clean_lyrics().
         4. Run on-the-fly inference per stanza using the model.
-        5. Calculate overall_profile and save to SQLite.
+        5. Save song and timeline via SQLAlchemy session.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        repo = SongRepository(db)
 
         # Step 1: Check if the song already exists
-        cursor.execute("SELECT id FROM songs WHERE artist = ? AND title = ?", (artist, title))
-        existing = cursor.fetchone()
+        existing = repo.get_by_artist_and_title(artist, title)
         if existing:
-            conn.close()
-            print(f"⚠️ Song '{title}' by {artist} already exists in database (ID: {existing[0]}).")
-            return existing[0]
-        conn.close()
+            print(f"⚠️ Song '{title}' by {artist} already exists in database (ID: {existing.id}).")
+            return existing.id
 
         # Step 2: Fetch from API
         raw_lyrics = self.fetch_song_from_api(artist, title)
@@ -161,41 +156,31 @@ class IngestionService:
         num_stanzas = len(stanzas)
         overall_profile = {emo: (total / num_stanzas) for emo, total in emotion_sums.items()}
 
-        # Step 5: Save to SQLite database
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO songs (artist, title, genre, overall_profile)
-            VALUES (?, ?, ?, ?)
-            """,
-            (artist, title, genre, json.dumps(overall_profile, ensure_ascii=False))
-        )
-        song_id = cursor.lastrowid
+        # Step 5: Save to database using SQLAlchemy Repository & Session
+        song_data = {
+            "artist": artist,
+            "title": title,
+            "genre": genre,
+            "overall_profile": json.dumps(overall_profile, ensure_ascii=False)
+        }
+        created_song = repo.create_song(song_data)
+        song_id = created_song.id
 
         for stz in stanza_results:
-            cursor.execute(
-                """
-                INSERT INTO emotion_timeline (song_id, stanza_index, text, emotion, confidence)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    song_id,
-                    stz["stanza_index"],
-                    stz["text"],
-                    stz["emotion"],
-                    stz["confidence"]
-                )
+            timeline_entry = SongTimelineEntity(
+                song_id=song_id,
+                stanza_index=stz["stanza_index"],
+                text=stz["text"],
+                emotion=stz["emotion"],
+                confidence=stz["confidence"]
             )
+            db.add(timeline_entry)
 
-        conn.commit()
-        conn.close()
+        db.commit()
 
         print(f"✅ Successfully ingested, cleaned, and analyzed song ID {song_id}: {artist} - {title}")
         return song_id
 
 if __name__ == "__main__":
-    # Test with the requested song
-    service = IngestionService()
-    service.ingest_song("Симона", "Прахосмукачка", "Pop-folk")
+    # Test block (requires a session maker if run directly, or kept for tests)
+    pass
