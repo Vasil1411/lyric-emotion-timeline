@@ -6,17 +6,17 @@ from src.models.model import LyricEmotionClassifier
 
 def load_trained_model(device):
     """
-    Loads your fine-tuned LyricEmotionClassifier with the correct 5 classes.
+    Loads your fine-tuned LyricEmotionClassifier with the correct classes.
     """
     model_path = SAVED_MODEL_DIR if (SAVED_MODEL_DIR.exists() and any(SAVED_MODEL_DIR.iterdir())) else MODEL_NAME
     
     print(f"📂 Loading tokenizer and model from: {model_path}")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     
-    # 1. Инициализираме модела
+    # 1. Initialize model
     model = LyricEmotionClassifier()
     
-    # 2. ПРЕХВЪРЛЯМЕ ГО НА УСТРОЙСТВОТО (GPU/CUDA) ПРЕДИ ДА ЗАРЕДИМ ТЕЖЕСТИТЕ!
+    # 2. Move to device (GPU/CUDA) before loading weights
     model.to(device)
     
     # 3. Load trained model weights
@@ -29,7 +29,11 @@ def load_trained_model(device):
         
     return tokenizer, model
 
-def analyze_song_timeline(song_text: str):
+def analyze_song_timeline(song_text: str) -> list:
+    """
+    Analyzes the song stanza by stanza and returns a structured timeline of emotions 
+    suitable for database storage and API responses.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🔥 Running inference on device: {device.type.upper()}")
     
@@ -38,15 +42,10 @@ def analyze_song_timeline(song_text: str):
 
     # Split song into stanzas
     stanzas = [stanza.strip() for stanza in song_text.split("\n\n") if stanza.strip()]
-    
-    print("\n" + "="*60)
-    print("🎵 LYRIC EMOTION TIMELINE ANALYSIS 🎵")
-    print("="*60 + "\n")
+    timeline_results = []
 
     for idx, stanza in enumerate(stanzas, 1):
-        print(f"--- Stanza / Verse [{idx}] ---")
         clean_stanza_text = " ".join(stanza.splitlines())
-        print(f"\"{clean_stanza_text}\"\n")
         
         # Tokenization & Inference
         encoding = tokenizer(
@@ -65,21 +64,23 @@ def analyze_song_timeline(song_text: str):
             logits = outputs.logits if hasattr(outputs, "logits") else outputs
             probabilities = torch.nn.functional.softmax(logits, dim=-1)[0]
 
-        results = {EMOTIONS[i]: probabilities[i].item() for i in range(len(EMOTIONS))}
-        sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+        emotions_dict = {EMOTIONS[i]: probabilities[i].item() for i in range(len(EMOTIONS))}
         
-        print("Emotions breakdown:")
-        for emotion, score in sorted_results:
-            bar = "█" * int(score * 20)
-            print(f"  {emotion.ljust(10)}: {score * 100:5.2f}% {bar}")
-        print("-" * 60 + "\n")
+        # Append stanza analysis to timeline
+        timeline_results.append({
+            "stanza_index": idx,
+            "stanza_text": clean_stanza_text,
+            "emotions": emotions_dict
+        })
+
+    return timeline_results
 
 if __name__ == "__main__":
-    # Test sample text
+    # Test sample text when run directly
     song_text = """
     First stanza or verse text goes here for testing...
     
     Second stanza or chorus text goes here...
     """
-
-    analyze_song_timeline(song_text)
+    results = analyze_song_timeline(song_text)
+    print("Inference results test:", results)
