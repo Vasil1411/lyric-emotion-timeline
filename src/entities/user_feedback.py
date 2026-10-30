@@ -8,6 +8,7 @@ class UserFeedbackEntity(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    stanza_id = Column(Integer, nullable=True)
     interaction_type = Column(String, nullable=False)
     rating = Column(Float, default=1.0)
     is_processed_for_training = Column(Boolean, default=False)
