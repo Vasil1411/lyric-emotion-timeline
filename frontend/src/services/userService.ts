@@ -19,7 +19,7 @@ export async function registerUser(username: string, email: string, password: st
   
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}))
-    throw new Error(errData.detail || "Грешка при регистрация.")
+    throw new Error(errData.detail || "Failed to register user.")
   }
   
   return await response.json()
@@ -38,7 +38,7 @@ export async function loginUser(emailOrUsername: string, password: string) {
   })
   
   if (!response.ok) {
-    throw new Error("Невалидни данни за вход.")
+    throw new Error("Invalid email or password.")
   }
   
   const data = await response.json()
