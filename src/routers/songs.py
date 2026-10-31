@@ -5,12 +5,14 @@ from src.repositories.song_repository import SongRepository
 from src.schemas.song_schema import SongIngestRequest, SongResponse
 from src.api.deps import get_current_user
 from src.entities.user import UserEntity
+from src.entities.user_feedback import UserFeedbackEntity
 
 # Import Business Logic & ML Services
 from src.services.ingestion_service import IngestionService
 from src.services.recommendation_service import RecommendationService
 from src.services.search_service import SearchService
 from src.services.analytics_service import AnalyticsService
+from src.services.personalization_service import PersonalizationService
 
 router = APIRouter(prefix="/api/songs", tags=["Songs & ML Services"])
 
@@ -90,3 +92,50 @@ def get_artist_emotional_profile(
     if not profile:
         raise HTTPException(status_code=404, detail=f"No data found for artist: {artist_name}")
     return profile
+
+
+@router.post("/feedback")
+def submit_feedback(
+    song_id: int,
+    interaction_type: str, # "like" или "dislike"
+    rating: float = 1.0,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user)
+):
+    """Save user interaction, check threshold, and trigger adaptive ML fine-tuning."""
+    service = PersonalizationService()
+    
+    # 1. Записваме фийдбека
+    service.log_feedback(
+        db=db, 
+        user_id=current_user.id, 
+        song_id=song_id, 
+        interaction_type=interaction_type, 
+        rating=rating
+    )
+    
+    # 2. Проверяваме прага за самообучение (например при 50 записа)
+    if service.check_training_threshold(db, user_id=current_user.id, threshold=50):
+        try:
+            import torch
+            from src.services.inference_service import load_trained_model
+            
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            tokenizer, model = load_trained_model(device)
+            
+            # Извикваме реалния fine-tuning процес
+            service.trigger_adaptive_finetuning(
+                db=db, 
+                user_id=current_user.id, 
+                model=model, 
+                tokenizer=tokenizer, 
+                device=device
+            )
+        except Exception as e:
+            print(f"⚠️ Error during background fine-tuning trigger: {e}")
+
+    return {
+        "message": "Feedback recorded successfully", 
+        "song_id": song_id, 
+        "type": interaction_type
+    }
