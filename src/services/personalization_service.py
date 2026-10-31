@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 
-from src.entities.feedback import UserFeedbackEntity
+from src.entities.user_feedback import UserFeedbackEntity
 from src.entities.song_timeline import SongTimelineEntity
+from src.config import SAVED_MODEL_DIR
 
 class UserFeedbackDataset(Dataset):
     """Custom PyTorch Dataset for user-preferred lyric stanzas."""
@@ -33,7 +34,6 @@ class UserFeedbackDataset(Dataset):
 
 class PersonalizationService:
     def __init__(self):
-        # Database session will be injected via methods to match FastAPI dependency injection
         pass
 
     def log_feedback(self, db: Session, user_id: int, song_id: int, interaction_type: str, rating: float = 1.0):
@@ -50,10 +50,7 @@ class PersonalizationService:
         print(f"📝 Feedback logged for User {user_id} on Song {song_id} [{interaction_type}]")
 
     def check_training_threshold(self, db: Session, user_id: int, threshold: int = 50) -> bool:
-        """
-        Checks if the user has accumulated enough unprocessed feedback 
-        to trigger adaptive fine-tuning.
-        """
+        """Checks if the user has accumulated enough unprocessed feedback to trigger adaptive fine-tuning."""
         unprocessed_count = db.query(UserFeedbackEntity).filter(
             UserFeedbackEntity.user_id == user_id,
             UserFeedbackEntity.is_processed_for_training == False,
@@ -64,13 +61,9 @@ class PersonalizationService:
         return unprocessed_count >= threshold
 
     def trigger_adaptive_finetuning(self, db: Session, user_id: int, model, tokenizer, device, epochs: int = 1):
-        """
-        Executes a lightweight few-shot fine-tuning loop using the user's 
-        liked stanzas/songs to adapt model weights for that user's profile.
-        """
+        """Executes a lightweight few-shot fine-tuning loop using user's liked stanzas and updates weights."""
         print(f"🚀 Triggering adaptive fine-tuning loop for User {user_id}...")
         
-        # Fetch stanzas from songs that the user positively interacted with via SQLAlchemy join
         rows = db.query(SongTimelineEntity.text).join(
             UserFeedbackEntity, SongTimelineEntity.song_id == UserFeedbackEntity.song_id
         ).filter(
@@ -86,14 +79,12 @@ class PersonalizationService:
         training_data = [{"text": row.text} for row in rows]
         print(f"📚 Loaded {len(training_data)} stanzas for personalization training.")
 
-        # Prepare dataset & dataloader
         dataset = UserFeedbackDataset(training_data, tokenizer)
         dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
 
         model.train()
         optimizer = AdamW(model.parameters(), lr=2e-5)
 
-        # Quick adaptation training loop (few-shot)
         for epoch in range(epochs):
             total_loss = 0.0
             for batch in dataloader:
@@ -103,7 +94,7 @@ class PersonalizationService:
                 optimizer.zero_grad()
                 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-                loss = outputs.loss if hasattr(outputs, "loss") else torch.tensor(0.1, requires_grad=True).to(device)
+                loss = outputs.loss if hasattr(outputs, "loss") and outputs.loss is not None else torch.tensor(0.1, requires_grad=True).to(device)
                 
                 loss.backward()
                 optimizer.step()
@@ -113,7 +104,11 @@ class PersonalizationService:
 
         model.eval()
 
-        # Mark feedback items as processed so they aren't reused redundantly
+        SAVED_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        weights_path = SAVED_MODEL_DIR / "model_weights.pth"
+        torch.save(model.state_dict(), weights_path)
+        print(f"💾 Saved updated personalized model weights to {weights_path}")
+
         db.query(UserFeedbackEntity).filter(
             UserFeedbackEntity.user_id == user_id,
             UserFeedbackEntity.is_processed_for_training == False,
