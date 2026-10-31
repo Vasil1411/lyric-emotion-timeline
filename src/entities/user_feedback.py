@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, Float, Boolean, DateTime, ForeignKey
+# src/entities/user_feedback.py
+
+from sqlalchemy import Column, Integer, Float, Boolean, DateTime, ForeignKey, String
 from sqlalchemy.sql import func
 from src.core.database import Base
 
